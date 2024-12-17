@@ -366,12 +366,14 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			continue
 		}
 
-		klog.V(2).Infof("Removing scale in protection for node - %s", instance.Name)
+		parts := strings.Split(instance.ProviderID, "/")
+		instanceID := parts[len(parts)-1]
+		klog.V(2).Infof("Removing scale in protection for node - %s; instance id - %s", instance.Name, instanceID)
 
 		params := &autoscaling.SetInstanceProtectionInput{
 			AutoScalingGroupName: &commonAsg.Name,
 			InstanceIds: []*string{
-				aws.String(instance.ProviderID),
+				aws.String(instanceID),
 			},
 			ProtectedFromScaleIn: aws.Bool(false),
 		}
