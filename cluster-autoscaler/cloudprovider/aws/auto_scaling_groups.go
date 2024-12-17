@@ -382,7 +382,7 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 
 		// Reduce ASG size by one
 		klog.V(2).Infof("Reducing desired size for node group - %s", commonAsg.Name)
-		asgErr := m.setAsgSizeNoLock(commonAsg, commonAsg.curSize-1)
+		asgErr := m.decreaseAsgSizeByOneNoLock(commonAsg)
 		if asgErr != nil {
 			klog.Errorf("Unable to reduce desired size of node group: %s , error: %v ", commonAsg.Name, asgErr)
 		}
