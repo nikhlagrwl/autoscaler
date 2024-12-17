@@ -380,11 +380,15 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			klog.Errorf("Unable to remove scale in protection from node: %s , error: %v ", instance.Name, err)
 		}
 
-		// TODO:
-		// Reduce ASG size by one using m.awsService.SetDesiredCapacity()
+		// Reduce ASG size by one
+		klog.V(2).Infof("Reducing desired size for node group - %s", commonAsg.Name)
+		asgErr := m.setAsgSizeNoLock(commonAsg, commonAsg.curSize-1)
+		if asgErr != nil {
+			klog.Errorf("Unable to reduce desired size of node group: %s , error: %v ", commonAsg.Name, asgErr)
+		}
 
 		// Proactively decrement the size so autoscaler makes better decisions
-		// commonAsg.curSize--
+		commonAsg.curSize--
 
 	}
 	return nil
