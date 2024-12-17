@@ -6,7 +6,7 @@ FLAGS=
 LDFLAGS?=-s
 ENVVAR=CGO_ENABLED=0
 GOOS?=linux
-GOARCH?=arm64
+GOARCH?=amd64
 REGISTRY?=426267651058.dkr.ecr.us-east-2.amazonaws.com
 DOCKER_NETWORK?=default
 ifdef BUILD_TAGS
@@ -59,7 +59,7 @@ ifdef BASEIMAGE
 		-f Dockerfile.$* .
 else
 	docker build --pull \
-		-t ${IMAGE}:1.0.3 \
+		-t ${IMAGE}:1.0.5 \
 		-f Dockerfile.$* .
 endif
 	@echo "Image ${TAG}${FOR_PROVIDER}-$* completed"
