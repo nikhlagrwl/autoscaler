@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/aws"
-	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/aws/session"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/autoscaling"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/ec2"
 	"k8s.io/autoscaler/cluster-autoscaler/config/dynamic"
@@ -368,25 +367,21 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 
 		klog.V(2).Infof("Removing scale in protection for node - %s;", instance.Name)
 
-		params := &autoscaling.SetInstanceProtectionInput{
-			AutoScalingGroupName: &commonAsg.Name,
-			InstanceIds: []*string{
-				aws.String(instance.Name),
-			},
-			ProtectedFromScaleIn: aws.Bool(false),
-		}
-
-		sess, err := session.NewSessionWithOptions(session.Options{
-			Config: aws.Config{Region: aws.String("ap-south-1")},
-		})
-		client := autoscaling.New(sess)
-
-		resp, output := client.SetInstanceProtection(params)
+		_, err = m.awsService.SetInstanceProtection(
+			&autoscaling.SetInstanceProtectionInput{
+				AutoScalingGroupName: &commonAsg.Name,
+				InstanceIds: []*string{
+					aws.String(instance.Name),
+				},
+				ProtectedFromScaleIn: aws.Bool(false),
+			})
 
 		if err != nil {
-			return err
+			klog.Errorf("Unable to remove scale in protection from node: %s , error: %v ", instance.Name, err)
 		}
-		klog.V(4).Infof("resp: %+v, output: %+v", resp, output)
+
+		// TODO:
+		// Reduce ASG size by one using m.awsService.SetDesiredCapacity()
 
 		// Proactively decrement the size so autoscaler makes better decisions
 		// commonAsg.curSize--
