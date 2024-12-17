@@ -366,22 +366,22 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			continue
 		}
 
-		parts := strings.Split(instance.ProviderID, "/")
-		instanceID := parts[len(parts)-1]
-		klog.V(2).Infof("Removing scale in protection for node - %s; instance id - %s", instance.Name, instanceID)
+		klog.V(2).Infof("Removing scale in protection for node - %s;", instance.Name)
 
 		params := &autoscaling.SetInstanceProtectionInput{
 			AutoScalingGroupName: &commonAsg.Name,
 			InstanceIds: []*string{
-				aws.String(instanceID),
+				aws.String(instance.Name),
 			},
 			ProtectedFromScaleIn: aws.Bool(false),
 		}
 
-		sess, err := session.NewSession()
+		sess, err := session.NewSessionWithOptions(session.Options{
+			Config: aws.Config{Region: aws.String("ap-south-1")},
+		})
 		client := autoscaling.New(sess)
 
-		resp, output := client.SetInstanceProtectionRequest(params)
+		resp, output := client.SetInstanceProtection(params)
 
 		if err != nil {
 			return err
