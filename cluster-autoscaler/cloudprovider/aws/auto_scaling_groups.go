@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/aws"
+	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/aws/session"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/autoscaling"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/ec2"
 	"k8s.io/autoscaler/cluster-autoscaler/config/dynamic"
@@ -365,20 +366,28 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 			continue
 		}
 
-		params := &autoscaling.TerminateInstanceInAutoScalingGroupInput{
-			InstanceId:                     aws.String(instance.Name),
-			ShouldDecrementDesiredCapacity: aws.Bool(true),
+		klog.V(2).Infof("Removing scale in protection for node - %s", instance.Name)
+
+		params := &autoscaling.SetInstanceProtectionInput{
+			AutoScalingGroupName: &commonAsg.Name,
+			InstanceIds: []*string{
+				aws.String(instance.ProviderID),
+			},
+			ProtectedFromScaleIn: aws.Bool(false),
 		}
-		start := time.Now()
-		resp, err := m.awsService.TerminateInstanceInAutoScalingGroup(params)
-		observeAWSRequest("TerminateInstanceInAutoScalingGroup", err, start)
+
+		sess, err := session.NewSession()
+		client := autoscaling.New(sess)
+
+		resp, output := client.SetInstanceProtectionRequest(params)
+
 		if err != nil {
 			return err
 		}
-		klog.V(4).Infof(*resp.Activity.Description)
+		klog.V(4).Infof("resp: %+v, output: %+v", resp, output)
 
 		// Proactively decrement the size so autoscaler makes better decisions
-		commonAsg.curSize--
+		// commonAsg.curSize--
 
 	}
 	return nil
