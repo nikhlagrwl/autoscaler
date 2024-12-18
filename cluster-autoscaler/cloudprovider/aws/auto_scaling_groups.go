@@ -17,16 +17,19 @@ limitations under the License.
 package aws
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/aws"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/autoscaling"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/ec2"
 	"k8s.io/autoscaler/cluster-autoscaler/config/dynamic"
+	"k8s.io/client-go/kubernetes"
 	klog "k8s.io/klog/v2"
 )
 
@@ -284,7 +287,7 @@ func (m *asgCache) decreaseAsgSizeByOneNoLock(asg *asg) error {
 }
 
 // DeleteInstances deletes the given instances. All instances must be controlled by the same ASG.
-func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
+func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef, kubeClient kubernetes.Interface) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -378,6 +381,7 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 
 		if err != nil {
 			klog.Errorf("Unable to remove scale in protection from node: %s , error: %v ", instance.Name, err)
+			return err
 		}
 
 		// Reduce ASG size by one
@@ -385,11 +389,19 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef) error {
 		asgErr := m.decreaseAsgSizeByOneNoLock(commonAsg)
 		if asgErr != nil {
 			klog.Errorf("Unable to reduce desired size of node group: %s , error: %v ", commonAsg.Name, asgErr)
+			return err
+		}
+
+		// Delete the node from the cluster
+		klog.V(2).Infof("Deleting node from k8s cluster: %s", instance.Name)
+		err = kubeClient.CoreV1().Nodes().Delete(context.Background(), instance.Name, metav1.DeleteOptions{})
+		if err != nil {
+			klog.Errorf("Failed to delete node: %s, error: %v", instance.Name, err)
+			return err
 		}
 
 		// Proactively decrement the size so autoscaler makes better decisions
 		commonAsg.curSize--
-
 	}
 	return nil
 }
