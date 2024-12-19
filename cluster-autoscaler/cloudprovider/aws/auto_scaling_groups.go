@@ -368,40 +368,66 @@ func (m *asgCache) DeleteInstances(instances []*AwsInstanceRef, kubeClient kuber
 			continue
 		}
 
-		klog.V(2).Infof("Removing scale in protection for node - %s;", instance.Name)
-
-		_, err = m.awsService.SetInstanceProtection(
-			&autoscaling.SetInstanceProtectionInput{
-				AutoScalingGroupName: &commonAsg.Name,
-				InstanceIds: []*string{
-					aws.String(instance.Name),
-				},
-				ProtectedFromScaleIn: aws.Bool(false),
-			})
-
-		if err != nil {
-			klog.Errorf("Unable to remove scale in protection from node: %s , error: %v ", instance.Name, err)
-			return err
+		warmPoolEnabled := false
+		for _, tag := range commonAsg.Tags {
+			if *tag.Key == "k8s.io/cluster-autoscaler/warmpool-enabled" && *tag.Value == "true" {
+				warmPoolEnabled = true
+			}
 		}
 
-		// Reduce ASG size by one
-		klog.V(2).Infof("Reducing desired size for node group - %s", commonAsg.Name)
-		asgErr := m.decreaseAsgSizeByOneNoLock(commonAsg)
-		if asgErr != nil {
-			klog.Errorf("Unable to reduce desired size of node group: %s , error: %v ", commonAsg.Name, asgErr)
-			return err
-		}
+		if warmPoolEnabled == true {
+			klog.V(2).Infof("Removing scale in protection for instance - %s;", instance.Name)
+			_, err = m.awsService.SetInstanceProtection(
+				&autoscaling.SetInstanceProtectionInput{
+					AutoScalingGroupName: &commonAsg.Name,
+					InstanceIds: []*string{
+						aws.String(instance.Name),
+					},
+					ProtectedFromScaleIn: aws.Bool(false),
+				})
 
-		// Delete the node from the cluster
-		klog.V(2).Infof("Deleting node from k8s cluster: %s", instance.Name)
-		err = kubeClient.CoreV1().Nodes().Delete(context.Background(), instance.Name, metav1.DeleteOptions{})
-		if err != nil {
-			klog.Errorf("Failed to delete node: %s, error: %v", instance.Name, err)
-			return err
-		}
+			if err != nil {
+				klog.Errorf("Unable to remove scale in protection from node: %s , error: %v ", instance.Name, err)
+				return err
+			}
 
-		// Proactively decrement the size so autoscaler makes better decisions
-		commonAsg.curSize--
+			klog.V(2).Infof("Reducing desired size for ASG  %s by one", commonAsg.Name)
+			asgErr := m.decreaseAsgSizeByOneNoLock(commonAsg)
+			if asgErr != nil {
+				klog.Errorf("Unable to reduce desired size of node group: %s , error: %v ", commonAsg.Name, asgErr)
+				return err
+			}
+
+			nodeName := ""
+			nodeList, err := kubeClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+			for i := range nodeList.Items {
+				if nodeList.Items[i].Labels["alpha.eksctl.io/instance-id"] == instance.Name {
+					nodeName = nodeList.Items[i].Name
+				}
+			}
+
+			klog.V(2).Infof("Deleting node from the cluster: %s", nodeName)
+			err = kubeClient.CoreV1().Nodes().Delete(context.Background(), nodeName, metav1.DeleteOptions{})
+			if err != nil {
+				klog.Errorf("Failed to delete node: %s, error: %v", nodeName, err)
+				return err
+			}
+		} else {
+			params := &autoscaling.TerminateInstanceInAutoScalingGroupInput{
+				InstanceId:                     aws.String(instance.Name),
+				ShouldDecrementDesiredCapacity: aws.Bool(true),
+			}
+			start := time.Now()
+			resp, err := m.awsService.TerminateInstanceInAutoScalingGroup(params)
+			observeAWSRequest("TerminateInstanceInAutoScalingGroup", err, start)
+			if err != nil {
+				return err
+			}
+			klog.V(4).Infof(*resp.Activity.Description)
+
+			// Proactively decrement the size so autoscaler makes better decisions
+			commonAsg.curSize--
+		}
 	}
 	return nil
 }
