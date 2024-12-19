@@ -30,6 +30,9 @@ import (
 	"k8s.io/autoscaler/cluster-autoscaler/simulator/framework"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/errors"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/gpu"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	klog "k8s.io/klog/v2"
 )
 
@@ -461,7 +464,7 @@ func BuildAWS(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDiscover
 		klog.Infof("Successfully load %d EC2 Instance Types %s", len(keys), keys)
 	}
 
-	manager, err := CreateAwsManager(sdkProvider, do, instanceTypes)
+	manager, err := CreateAwsManager(sdkProvider, do, instanceTypes, createKubeClient(opts))
 	if err != nil {
 		klog.Fatalf("Failed to create AWS Manager: %v", err)
 	}
@@ -472,4 +475,17 @@ func BuildAWS(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDiscover
 	}
 	RegisterMetrics()
 	return provider
+}
+
+func getKubeConfig(opts config.AutoscalingOptions) *rest.Config {
+	klog.V(1).Infof("Using kubeconfig file: %s", opts.KubeClientOpts.KubeConfigPath)
+	kubeConfig, err := clientcmd.BuildConfigFromFlags("", opts.KubeClientOpts.KubeConfigPath)
+	if err != nil {
+		klog.Fatalf("Failed to build kubeConfig: %v", err)
+	}
+	return kubeConfig
+}
+
+func createKubeClient(opts config.AutoscalingOptions) kubernetes.Interface {
+	return kubernetes.NewForConfigOrDie(getKubeConfig(opts))
 }

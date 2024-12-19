@@ -39,6 +39,7 @@ import (
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/aws/aws-sdk-go/service/eks"
 	"k8s.io/autoscaler/cluster-autoscaler/config"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/gpu"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -60,6 +61,7 @@ type AwsManager struct {
 	lastRefresh           time.Time
 	instanceTypes         map[string]*InstanceType
 	managedNodegroupCache *managedNodegroupCache
+	kubeClient            kubernetes.Interface
 }
 
 type asgTemplate struct {
@@ -75,6 +77,7 @@ func createAWSManagerInternal(
 	discoveryOpts cloudprovider.NodeGroupDiscoveryOptions,
 	awsService *awsWrapper,
 	instanceTypes map[string]*InstanceType,
+	kubeClient kubernetes.Interface,
 ) (*AwsManager, error) {
 	klog.Infof("AWS SDK Version: %s", aws.SDKVersion)
 
@@ -100,6 +103,7 @@ func createAWSManagerInternal(
 		asgCache:              cache,
 		instanceTypes:         instanceTypes,
 		managedNodegroupCache: mngCache,
+		kubeClient:            kubeClient,
 	}
 
 	if err := manager.forceRefresh(); err != nil {
@@ -110,8 +114,8 @@ func createAWSManagerInternal(
 }
 
 // CreateAwsManager constructs awsManager object.
-func CreateAwsManager(awsSDKProvider *awsSDKProvider, discoveryOpts cloudprovider.NodeGroupDiscoveryOptions, instanceTypes map[string]*InstanceType) (*AwsManager, error) {
-	return createAWSManagerInternal(awsSDKProvider, discoveryOpts, nil, instanceTypes)
+func CreateAwsManager(awsSDKProvider *awsSDKProvider, discoveryOpts cloudprovider.NodeGroupDiscoveryOptions, instanceTypes map[string]*InstanceType, kubeClient kubernetes.Interface) (*AwsManager, error) {
+	return createAWSManagerInternal(awsSDKProvider, discoveryOpts, nil, instanceTypes, kubeClient)
 }
 
 // Refresh is called before every main loop and can be used to dynamically update cloud provider state.
@@ -158,7 +162,7 @@ func (m *AwsManager) SetAsgSize(asg *asg, size int) error {
 
 // DeleteInstances deletes the given instances. All instances must be controlled by the same ASG.
 func (m *AwsManager) DeleteInstances(instances []*AwsInstanceRef) error {
-	if err := m.asgCache.DeleteInstances(instances); err != nil {
+	if err := m.asgCache.DeleteInstances(instances, m.kubeClient); err != nil {
 		return err
 	}
 	klog.V(2).Infof("DeleteInstances was called: scheduling an ASG list refresh for next main loop evaluation")
