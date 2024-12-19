@@ -1,4 +1,4 @@
-ALL_ARCH = amd64 arm64 s390x
+ALL_ARCH = amd64
 all: $(addprefix build-arch-,$(ALL_ARCH))
 
 TAG?=dev
@@ -6,8 +6,8 @@ FLAGS=
 LDFLAGS?=-s
 ENVVAR=CGO_ENABLED=0
 GOOS?=linux
-GOARCH?=$(shell go env GOARCH)
-REGISTRY?=staging-k8s.gcr.io
+GOARCH?=amd64
+REGISTRY?=426267651058.dkr.ecr.us-east-2.amazonaws.com
 DOCKER_NETWORK?=default
 ifdef BUILD_TAGS
   TAGS_FLAG=--tags ${BUILD_TAGS}
@@ -32,7 +32,7 @@ ifndef AWS_REGION
   AWS_REGION=$(shell aws configure get region)
 endif
 
-IMAGE=$(REGISTRY)/cluster-autoscaler$(PROVIDER)
+IMAGE=$(REGISTRY)/cluster-autoscaler
 
 export DOCKER_CLI_EXPERIMENTAL := enabled
 
@@ -59,7 +59,7 @@ ifdef BASEIMAGE
 		-f Dockerfile.$* .
 else
 	docker build --pull \
-		-t ${IMAGE}-$*:${TAG} \
+		-t ${IMAGE}:1.0.5 \
 		-f Dockerfile.$* .
 endif
 	@echo "Image ${TAG}${FOR_PROVIDER}-$* completed"

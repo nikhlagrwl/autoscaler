@@ -517,7 +517,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) caerrors.AutoscalerErr
 
 	if len(unschedulablePodsToHelp) == 0 {
 		scaleUpStatus.Result = status.ScaleUpNotNeeded
-		klog.V(1).Info("No unschedulable pods")
+		klog.V(1).Info("No unschedulable pods; Nikhil logs")
 	} else if a.MaxNodesTotal > 0 && len(readyNodes) >= a.MaxNodesTotal {
 		scaleUpStatus.Result = status.ScaleUpNoOptionsAvailable
 		klog.V(1).Info("Max total nodes in cluster reached")
@@ -540,7 +540,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) caerrors.AutoscalerErr
 	if a.ScaleDownEnabled {
 		unneededStart := time.Now()
 
-		klog.V(4).Infof("Calculating unneeded nodes")
+		klog.V(4).Infof("Calculating unneeded nodes; Nikhil logs")
 
 		var scaleDownCandidates []*apiv1.Node
 		var podDestinations []*apiv1.Node
